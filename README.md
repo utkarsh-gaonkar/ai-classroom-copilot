@@ -119,11 +119,11 @@ Create a Render **Web Service** from this repository:
 
 - Root directory: `server`
 - Runtime: Node
-- Build command: `npm ci && npm run build`
+- Build command: `npm ci --include=dev && npm run build`
 - Start command: `npm start`
 - Health check path: `/api/health`
 
-The package scripts confirm that `npm run build` runs `tsc` and `npm start` runs `node dist/index.js`. The server listens on Render's `PORT` and binds to `0.0.0.0`.
+The package scripts confirm that `npm run build` runs `tsc` and `npm start` runs `node dist/index.js`. Include dev dependencies in the Render build because TypeScript is a build-time dev dependency and Render may set `NODE_ENV=production` during install. The server listens on Render's `PORT` and binds to `0.0.0.0`.
 
 Add these Render environment variables:
 
