@@ -23,5 +23,5 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export const api = {
 	explain: (request: ExplainRequest) => post<ExplainResponse>('explain', request),
 	translate: (text: string, targetLang: Language) => post<TranslateResponse>('translate', { text, targetLang }),
-	quiz: (text: string) => post<QuizResponse>('quiz', { text }),
+	quiz: (text: string, questionCount: number) => post<QuizResponse>('quiz', { text, questionCount }),
 }

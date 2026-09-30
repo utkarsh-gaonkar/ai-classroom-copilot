@@ -12,5 +12,14 @@ export declare const DEMO_QUIZ: {
         explanation: string;
     }[];
 };
+export declare function getDemoQuiz(questionCount: number): {
+    questions: {
+        id: number;
+        question: string;
+        options: string[];
+        correctAnswer: number;
+        explanation: string;
+    }[];
+};
 export declare function getDemoExplanation(level: string, style: string): string;
 export declare function getDemoTranslation(targetLang: string): string;

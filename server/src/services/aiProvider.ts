@@ -22,7 +22,7 @@ export function isAIConfigured(): boolean {
 export async function generateAIResponse(
   prompt: string,
   systemInstruction: string,
-  options: { jsonMode?: boolean } = {},
+  options: { jsonMode?: boolean; questionCount?: number } = {},
 ): Promise<AIResponse> {
   const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey || apiKey === 'your_groq_api_key_here') throw new Error('AI_NOT_CONFIGURED');
@@ -43,7 +43,9 @@ export async function generateAIResponse(
           { role: 'user', content: prompt },
         ],
         temperature: 0.4,
-        max_completion_tokens: 4096,
+        max_completion_tokens: options.questionCount
+          ? Math.min(32_768, Math.max(4_096, options.questionCount * 160))
+          : 4_096,
         ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: controller.signal,

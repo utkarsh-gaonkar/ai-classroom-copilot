@@ -78,7 +78,7 @@ test('translate endpoint returns a demo translation for valid input', async () =
   assert.ok(body.translation.length > 0)
 })
 
-test('quiz endpoint returns five demo questions for valid input', async () => {
+test('quiz endpoint returns the default 30 demo questions for valid input', async () => {
   const response = await fetch(`${baseUrl}/api/ai/quiz`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,7 +88,33 @@ test('quiz endpoint returns five demo questions for valid input', async () => {
 
   assert.equal(response.status, 200)
   assert.equal(body.mode, 'demo')
-  assert.equal(body.quiz.questions.length, 5)
+  assert.equal(body.quiz.questions.length, 30)
+})
+
+test('quiz endpoint returns the requested number of demo questions', async () => {
+  const response = await fetch(`${baseUrl}/api/ai/quiz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'Cells use energy to carry out life processes.', questionCount: 31 }),
+  })
+  const body = await response.json() as { quiz: { questions: { id: number }[] }; mode: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.mode, 'demo')
+  assert.equal(body.quiz.questions.length, 31)
+  assert.deepEqual(body.quiz.questions.map((question) => question.id), Array.from({ length: 31 }, (_, index) => index + 1))
+})
+
+test('quiz endpoint rejects question counts below the material minimum', async () => {
+  const response = await fetch(`${baseUrl}/api/ai/quiz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'Cells use energy.', questionCount: 2 }),
+  })
+  const body = await response.json() as { status: number }
+
+  assert.equal(response.status, 400)
+  assert.equal(body.status, 400)
 })
 
 test('malformed JSON returns a client error in JSON', async () => {

@@ -198,6 +198,16 @@ export const DEMO_QUIZ = {
   ],
 };
 
+export function getDemoQuiz(questionCount: number) {
+  const sourceQuestions = DEMO_QUIZ.questions
+  return {
+    questions: Array.from({ length: questionCount }, (_, index) => ({
+      ...sourceQuestions[index % sourceQuestions.length],
+      id: index + 1,
+    })),
+  }
+}
+
 export function getDemoExplanation(level: string, style: string): string {
   if (style === 'detailed' || level === 'college') {
     return DEMO_EXPLANATION_DETAILED;

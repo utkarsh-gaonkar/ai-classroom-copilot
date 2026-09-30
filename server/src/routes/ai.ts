@@ -3,7 +3,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { AIProviderError, generateAIResponse, isAIConfigured } from '../services/aiProvider';
 import { buildExplainPrompt, buildTranslatePrompt, buildQuizPrompt, SYSTEM_INSTRUCTION } from '../services/prompts';
-import { getDemoExplanation, getDemoTranslation, DEMO_QUIZ } from '../services/demoContent';
+import { getDemoExplanation, getDemoTranslation, getDemoQuiz } from '../services/demoContent';
 import { AppError } from '../middleware/errorHandler';
 
 export const aiRouter = Router();
@@ -32,10 +32,12 @@ const translateSchema = z.object({
 
 const quizSchema = z.object({
   text: z.string().trim().min(1, 'Text is required').max(MAX_TEXT_LENGTH, `Text must be under ${MAX_TEXT_LENGTH} characters`),
+  questionCount: z.number().int().min(30).max(200).default(30),
 });
 
-const quizOutputSchema = z.object({
-  questions: z.array(z.object({
+function createQuizOutputSchema(questionCount: number) {
+  return z.object({
+    questions: z.array(z.object({
     id: z.number().int().positive().optional(),
     question: z.string().trim().min(1),
     options: z.array(z.string().trim().min(1)).length(4).refine(
@@ -44,8 +46,9 @@ const quizOutputSchema = z.object({
     ),
     correctAnswer: z.number().int().min(0).max(3),
     explanation: z.string().trim().min(1),
-  })).length(5),
-});
+    })).length(questionCount),
+  });
+}
 
 function validate<T>(schema: z.ZodSchema<T>) {
   return (req: Request, _res: Response, next: NextFunction) => {
@@ -112,17 +115,17 @@ aiRouter.post('/translate', validate(translateSchema), async (req: Request, res:
 
 aiRouter.post('/quiz', validate(quizSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { text } = req.body;
+    const { text, questionCount } = req.body;
 
     if (!isAIConfigured()) {
       return res.json({
-        quiz: DEMO_QUIZ,
+        quiz: getDemoQuiz(questionCount),
         mode: 'demo',
       });
     }
 
-    const prompt = buildQuizPrompt(text);
-    const result = await generateAIResponse(prompt, SYSTEM_INSTRUCTION, { jsonMode: true });
+    const prompt = buildQuizPrompt(text, questionCount);
+    const result = await generateAIResponse(prompt, SYSTEM_INSTRUCTION, { jsonMode: true, questionCount });
 
     let quizData: unknown;
     try {
@@ -131,7 +134,7 @@ aiRouter.post('/quiz', validate(quizSchema), async (req: Request, res: Response,
       return next(new AppError(502, 'Groq returned malformed quiz data. Please retry.'));
     }
 
-    const parsedQuiz = quizOutputSchema.safeParse(quizData);
+    const parsedQuiz = createQuizOutputSchema(questionCount).safeParse(quizData);
     if (!parsedQuiz.success) {
       return next(new AppError(502, 'Groq returned an incomplete quiz. Please retry.'));
     }

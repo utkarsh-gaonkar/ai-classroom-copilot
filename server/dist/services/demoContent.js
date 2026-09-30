@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEMO_QUIZ = exports.DEMO_TRANSLATION_KONKANI = exports.DEMO_TRANSLATION_MARATHI = exports.DEMO_TRANSLATION_HINDI = exports.DEMO_EXPLANATION_DETAILED = exports.DEMO_EXPLANATION_SIMPLE = void 0;
+exports.getDemoQuiz = getDemoQuiz;
 exports.getDemoExplanation = getDemoExplanation;
 exports.getDemoTranslation = getDemoTranslation;
 exports.DEMO_EXPLANATION_SIMPLE = `## Database Normalization - Simple Explanation
@@ -197,6 +198,15 @@ exports.DEMO_QUIZ = {
         },
     ],
 };
+function getDemoQuiz(questionCount) {
+    const sourceQuestions = exports.DEMO_QUIZ.questions;
+    return {
+        questions: Array.from({ length: questionCount }, (_, index) => ({
+            ...sourceQuestions[index % sourceQuestions.length],
+            id: index + 1,
+        })),
+    };
+}
 function getDemoExplanation(level, style) {
     if (style === 'detailed' || level === 'college') {
         return exports.DEMO_EXPLANATION_DETAILED;

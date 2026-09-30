@@ -37,7 +37,9 @@ async function generateAIResponse(prompt, systemInstruction, options = {}) {
                     { role: 'user', content: prompt },
                 ],
                 temperature: 0.4,
-                max_completion_tokens: 4096,
+                max_completion_tokens: options.questionCount
+                    ? Math.min(32_768, Math.max(4_096, options.questionCount * 160))
+                    : 4_096,
                 ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
             }),
             signal: controller.signal,

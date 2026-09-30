@@ -71,7 +71,7 @@ let baseUrl = '';
     strict_1.default.equal(body.targetLang, 'hi');
     strict_1.default.ok(body.translation.length > 0);
 });
-(0, node_test_1.test)('quiz endpoint returns five demo questions for valid input', async () => {
+(0, node_test_1.test)('quiz endpoint returns the default 30 demo questions for valid input', async () => {
     const response = await fetch(`${baseUrl}/api/ai/quiz`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +80,29 @@ let baseUrl = '';
     const body = await response.json();
     strict_1.default.equal(response.status, 200);
     strict_1.default.equal(body.mode, 'demo');
-    strict_1.default.equal(body.quiz.questions.length, 5);
+    strict_1.default.equal(body.quiz.questions.length, 30);
+});
+(0, node_test_1.test)('quiz endpoint returns the requested number of demo questions', async () => {
+    const response = await fetch(`${baseUrl}/api/ai/quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Cells use energy to carry out life processes.', questionCount: 31 }),
+    });
+    const body = await response.json();
+    strict_1.default.equal(response.status, 200);
+    strict_1.default.equal(body.mode, 'demo');
+    strict_1.default.equal(body.quiz.questions.length, 31);
+    strict_1.default.deepEqual(body.quiz.questions.map((question) => question.id), Array.from({ length: 31 }, (_, index) => index + 1));
+});
+(0, node_test_1.test)('quiz endpoint rejects question counts below the material minimum', async () => {
+    const response = await fetch(`${baseUrl}/api/ai/quiz`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Cells use energy.', questionCount: 2 }),
+    });
+    const body = await response.json();
+    strict_1.default.equal(response.status, 400);
+    strict_1.default.equal(body.status, 400);
 });
 (0, node_test_1.test)('malformed JSON returns a client error in JSON', async () => {
     const response = await fetch(`${baseUrl}/api/ai/explain`, {

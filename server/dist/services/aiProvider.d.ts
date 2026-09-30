@@ -8,5 +8,6 @@ export declare class AIProviderError extends Error {
 export declare function isAIConfigured(): boolean;
 export declare function generateAIResponse(prompt: string, systemInstruction: string, options?: {
     jsonMode?: boolean;
+    questionCount?: number;
 }): Promise<AIResponse>;
 export {};

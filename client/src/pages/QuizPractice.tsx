@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, Check, CircleHelp, RotateCcw, Sparkles, X } from 'lucide-react'
+import { useRef, useState, type FormEvent } from 'react'
+import { ArrowLeft, ArrowRight, Check, CircleHelp, FileText, Minus, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { ErrorMessage, LoadingSpinner } from '../components/ui'
 import { api } from '../services/api'
 import { saveSession } from '../services/storage'
 import type { QuizQuestion } from '../types'
-import { MAX_STUDY_TEXT_LENGTH } from '../services/documentExtraction'
+import { DocumentExtractionError, extractDocumentText, MAX_DOCUMENT_BYTES, MAX_STUDY_TEXT_LENGTH, type ExtractionProgress } from '../services/documentExtraction'
+import { calculateMinQuestions, MAX_QUESTION_COUNT, MIN_QUESTION_COUNT } from '../services/quizQuestionCount'
 
 interface QuizLocationState {
   text?: string
@@ -20,6 +21,9 @@ export default function QuizPractice() {
   const location = useLocation()
   const routeState = location.state as QuizLocationState | null
   const [text, setText] = useState(routeState?.text ?? '')
+  const [minRequiredQuestions, setMinRequiredQuestions] = useState(() => calculateMinQuestions(routeState?.text?.length ?? 0, 'text'))
+  const [selectedQuestionCount, setSelectedQuestionCount] = useState(() => calculateMinQuestions(routeState?.text?.length ?? 0, 'text'))
+  const [questionCountInput, setQuestionCountInput] = useState(() => String(calculateMinQuestions(routeState?.text?.length ?? 0, 'text')))
   const [sessionId, setSessionId] = useState(routeState?.sessionId)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [answers, setAnswers] = useState<(number | null)[]>([])
@@ -27,11 +31,62 @@ export default function QuizPractice() {
   const [isLoading, setIsLoading] = useState(false)
   const [isDemoQuiz, setIsDemoQuiz] = useState(false)
   const [error, setError] = useState('')
+  const [uploadError, setUploadError] = useState('')
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null)
+  const [documentName, setDocumentName] = useState('')
   const [isComplete, setIsComplete] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const currentQuestion = questions[currentIndex]
   const selectedAnswer = answers[currentIndex]
   const score = questions.reduce((total, question, index) => total + (answers[index] === question.correctAnswer ? 1 : 0), 0)
+
+  function updatePastedText(value: string) {
+    const nextText = value.slice(0, MAX_STUDY_TEXT_LENGTH)
+    const minimum = calculateMinQuestions(nextText.length, 'text')
+    setText(nextText)
+    setMinRequiredQuestions(minimum)
+    setSelectedQuestionCount(minimum)
+    setQuestionCountInput(String(minimum))
+  }
+
+  function setQuestionCount(value: number) {
+    const boundedValue = Math.min(MAX_QUESTION_COUNT, Math.max(minRequiredQuestions, Math.round(value)))
+    setSelectedQuestionCount(boundedValue)
+    setQuestionCountInput(String(boundedValue))
+  }
+
+  function updateQuestionCountInput(value: string) {
+    setQuestionCountInput(value)
+    const parsedValue = Number(value)
+    if (Number.isInteger(parsedValue) && parsedValue >= minRequiredQuestions && parsedValue <= MAX_QUESTION_COUNT) {
+      setSelectedQuestionCount(parsedValue)
+    }
+  }
+
+  async function handleDocument(file?: File) {
+    if (!file) return
+    setUploadError('')
+    setExtractionProgress(null)
+    setIsExtracting(true)
+    try {
+      const extracted = await extractDocumentText(file, setExtractionProgress)
+      const fileType = file.name.split('.').pop() ?? 'text'
+      const minimum = calculateMinQuestions(extracted.length, fileType)
+      setText(extracted)
+      setMinRequiredQuestions(minimum)
+      setSelectedQuestionCount(minimum)
+      setQuestionCountInput(String(minimum))
+      setDocumentName(file.name)
+      setError('')
+    } catch (extractionError) {
+      setUploadError(extractionError instanceof DocumentExtractionError ? extractionError.message : 'Could not read this document. Check the file and try again.')
+    } finally {
+      setIsExtracting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   async function generateQuiz(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
@@ -47,7 +102,7 @@ export default function QuizPractice() {
     setCurrentIndex(0)
     setIsComplete(false)
     try {
-      const result = await api.quiz(text.trim())
+      const result = await api.quiz(text.trim(), selectedQuestionCount)
       if (!result.quiz.questions.length || result.quiz.questions.some((question) => question.options.length !== 4)) {
         throw new Error('The quiz service returned incomplete questions. Please try again.')
       }
@@ -101,12 +156,41 @@ export default function QuizPractice() {
       </header>
 
       {!questions.length && !isLoading && <form onSubmit={generateQuiz} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-        <div className="mb-4 flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800"><CircleHelp aria-hidden="true" className="size-5" /></span><div><h2 className="font-bold text-slate-950">Choose your study material</h2><p className="mt-1 text-sm text-slate-500">{routeState?.text ? 'We brought your material over from the study workspace.' : 'Paste lesson notes, a reading passage, or the text you just studied.'}</p></div></div>
+        <div className="mb-4 flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800"><CircleHelp aria-hidden="true" className="size-5" /></span><div><h2 className="font-bold text-slate-950">Choose your study material</h2><p className="mt-1 text-sm text-slate-500">{routeState?.text ? 'We brought your material over from the study workspace.' : 'Paste lesson notes or upload a PDF, DOCX, or PPTX file.'}</p></div></div>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a PDF, DOCX, or PPTX file" />
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting || isLoading} aria-label="Upload a PDF, DOCX, or PPTX file" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload PDF, DOCX, PPTX</button>
+          <span className="text-xs text-slate-500">Extracted locally · up to {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB</span>
+        </div>
+        {isExtracting && <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 p-3" role="status" aria-live="polite"><p className="text-sm font-semibold text-emerald-900">{extractionProgress?.stage ?? 'Preparing document…'}</p><progress className="mt-2 h-2 w-full accent-emerald-700" max="100" value={extractionProgress?.percent ?? 0} aria-label="Document extraction progress" /></div>}
+        {uploadError && <div className="mb-3"><ErrorMessage message={uploadError} onDismiss={() => setUploadError('')} /></div>}
+        {documentName && <div className="mb-3 flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700"><FileText aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">Loaded {documentName}</span></div>}
         <label htmlFor="quiz-source" className="sr-only">Material for quiz</label>
-        <textarea id="quiz-source" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste the material you want to practice…" className="min-h-56 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
+        <textarea id="quiz-source" value={text} onChange={(event) => updatePastedText(event.target.value)} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste the material you want to practice…" className="min-h-56 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
         <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Up to {MAX_STUDY_TEXT_LENGTH.toLocaleString()} characters</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
+        <section className="mt-6 border-t border-slate-100 pt-5" aria-labelledby="question-count-heading">
+          <h3 id="question-count-heading" className="text-sm font-bold text-slate-900">Number of Questions</h3>
+          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2" aria-label="Quick select question count">
+              {[...new Set([minRequiredQuestions, 50, 100])].map((count) => {
+                const isMinimum = count === minRequiredQuestions
+                const isSelected = count === selectedQuestionCount
+                return <button key={count} type="button" onClick={() => setQuestionCount(count)} aria-label={`Select ${count} questions${isMinimum ? ' minimum' : ''}`} aria-pressed={isSelected} disabled={count < minRequiredQuestions} className={`min-h-10 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 ${isSelected ? 'border-indigo-700 bg-indigo-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'}`}>
+                  {count}{isMinimum ? ' (Min)' : ''}
+                </button>
+              })}
+            </div>
+
+            <div className="flex min-h-11 items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white sm:w-40">
+              <button type="button" onClick={() => setQuestionCount(selectedQuestionCount - 1)} disabled={selectedQuestionCount <= minRequiredQuestions} aria-label="Decrease question count" className="inline-flex w-11 shrink-0 items-center justify-center border-r border-slate-200 text-slate-600 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:text-slate-300"><Minus aria-hidden="true" className="size-4" /></button>
+              <input id="question-count" type="number" min={minRequiredQuestions} max={MAX_QUESTION_COUNT} step="1" value={questionCountInput} onChange={(event) => updateQuestionCountInput(event.target.value)} onBlur={() => setQuestionCount(selectedQuestionCount)} aria-label="Custom number of questions" className="min-w-0 w-full border-0 bg-transparent px-2 py-2 text-center text-sm font-bold tabular-nums text-slate-900 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-600" />
+              <button type="button" onClick={() => setQuestionCount(selectedQuestionCount + 1)} disabled={selectedQuestionCount >= MAX_QUESTION_COUNT} aria-label="Increase question count" className="inline-flex w-11 shrink-0 items-center justify-center border-l border-slate-200 text-slate-600 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:text-slate-300"><Plus aria-hidden="true" className="size-4" /></button>
+            </div>
+          </div>
+          <p className="mt-3 text-sm leading-5 text-gray-500">We recommend at least {minRequiredQuestions} questions to adequately cover your material. (Minimum: {MIN_QUESTION_COUNT}, Maximum: {MAX_QUESTION_COUNT})</p>
+        </section>
         {error && <div className="mt-5"><ErrorMessage message={error} onDismiss={() => setError('')} /></div>}
-        <button type="submit" disabled={isLoading || !text.trim()} className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-3 font-bold text-white transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />Generate quiz</button>
+        <button type="submit" disabled={isLoading || isExtracting || !text.trim()} className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-3 font-bold text-white transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />Generate quiz</button>
       </form>}
 
       {isLoading && <div className="flex min-h-80 items-center justify-center rounded-xl border border-slate-200 bg-white text-emerald-900 shadow-sm"><LoadingSpinner label="Building questions from your lesson…" /></div>}

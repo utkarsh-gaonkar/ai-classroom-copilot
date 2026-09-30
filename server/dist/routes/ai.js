@@ -31,16 +31,19 @@ const translateSchema = zod_1.z.object({
 });
 const quizSchema = zod_1.z.object({
     text: zod_1.z.string().trim().min(1, 'Text is required').max(MAX_TEXT_LENGTH, `Text must be under ${MAX_TEXT_LENGTH} characters`),
+    questionCount: zod_1.z.number().int().min(30).max(200).default(30),
 });
-const quizOutputSchema = zod_1.z.object({
-    questions: zod_1.z.array(zod_1.z.object({
-        id: zod_1.z.number().int().positive().optional(),
-        question: zod_1.z.string().trim().min(1),
-        options: zod_1.z.array(zod_1.z.string().trim().min(1)).length(4).refine(options => new Set(options.map(option => option.toLocaleLowerCase())).size === 4, 'Answer options must be distinct'),
-        correctAnswer: zod_1.z.number().int().min(0).max(3),
-        explanation: zod_1.z.string().trim().min(1),
-    })).length(5),
-});
+function createQuizOutputSchema(questionCount) {
+    return zod_1.z.object({
+        questions: zod_1.z.array(zod_1.z.object({
+            id: zod_1.z.number().int().positive().optional(),
+            question: zod_1.z.string().trim().min(1),
+            options: zod_1.z.array(zod_1.z.string().trim().min(1)).length(4).refine(options => new Set(options.map(option => option.toLocaleLowerCase())).size === 4, 'Answer options must be distinct'),
+            correctAnswer: zod_1.z.number().int().min(0).max(3),
+            explanation: zod_1.z.string().trim().min(1),
+        })).length(questionCount),
+    });
+}
 function validate(schema) {
     return (req, _res, next) => {
         const result = schema.safeParse(req.body);
@@ -101,15 +104,15 @@ exports.aiRouter.post('/translate', validate(translateSchema), async (req, res, 
 });
 exports.aiRouter.post('/quiz', validate(quizSchema), async (req, res, next) => {
     try {
-        const { text } = req.body;
+        const { text, questionCount } = req.body;
         if (!(0, aiProvider_1.isAIConfigured)()) {
             return res.json({
-                quiz: demoContent_1.DEMO_QUIZ,
+                quiz: (0, demoContent_1.getDemoQuiz)(questionCount),
                 mode: 'demo',
             });
         }
-        const prompt = (0, prompts_1.buildQuizPrompt)(text);
-        const result = await (0, aiProvider_1.generateAIResponse)(prompt, prompts_1.SYSTEM_INSTRUCTION, { jsonMode: true });
+        const prompt = (0, prompts_1.buildQuizPrompt)(text, questionCount);
+        const result = await (0, aiProvider_1.generateAIResponse)(prompt, prompts_1.SYSTEM_INSTRUCTION, { jsonMode: true, questionCount });
         let quizData;
         try {
             quizData = JSON.parse(result.text);
@@ -117,7 +120,7 @@ exports.aiRouter.post('/quiz', validate(quizSchema), async (req, res, next) => {
         catch {
             return next(new errorHandler_1.AppError(502, 'Groq returned malformed quiz data. Please retry.'));
         }
-        const parsedQuiz = quizOutputSchema.safeParse(quizData);
+        const parsedQuiz = createQuizOutputSchema(questionCount).safeParse(quizData);
         if (!parsedQuiz.success) {
             return next(new errorHandler_1.AppError(502, 'Groq returned an incomplete quiz. Please retry.'));
         }

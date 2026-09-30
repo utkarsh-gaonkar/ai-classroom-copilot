@@ -55,16 +55,16 @@ IMPORTANT RULES:
 TEXT TO TRANSLATE:
 ${text}`;
 }
-function buildQuizPrompt(text) {
+function buildQuizPrompt(text, questionCount) {
     return `Generate a quiz based on the following study material.
 
-Create exactly 5 multiple-choice questions. Each question must:
+Create exactly ${questionCount} multiple-choice questions. Each question must:
 - Be grounded in the provided material (do not make up facts)
 - Have exactly 4 answer options
 - Have exactly one correct answer
 - Include a brief explanation of why the correct answer is right
 
-Respond ONLY with valid JSON in this exact format, no other text:
+Respond ONLY with valid JSON containing exactly ${questionCount} questions in this format, no other text:
 {
   "questions": [
     {
