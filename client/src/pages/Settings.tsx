@@ -1,13 +1,5 @@
-import { Check, Contrast, Languages, Minus, Plus, Settings2, Volume2, Waves } from 'lucide-react'
+import { Check, Contrast, Minus, Plus, Settings2, Volume2, Waves } from 'lucide-react'
 import { usePreferences } from '../hooks/usePreferences'
-import type { Language } from '../types'
-
-const languages: { value: Language; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'mr', label: 'Marathi' },
-  { value: 'kok', label: 'Konkani' },
-]
 
 function PreferenceToggle({
   checked,
@@ -80,15 +72,8 @@ export default function Settings() {
           <PreferenceToggle checked={preferences.reducedMotion} onChange={(reducedMotion) => updatePreferences({ reducedMotion })} label="Reduce motion" description="Minimize transitions and movement throughout the app." />
         </section>
 
-        <section className="grid gap-7 py-7 sm:grid-cols-2" aria-label="Language and speech preferences">
-          <div>
-            <label htmlFor="default-language" className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><Languages aria-hidden="true" className="size-4 text-indigo-700" />Default language</label>
-            <p className="mb-3 text-sm text-slate-500">Used for new translations.</p>
-            <select id="default-language" value={preferences.defaultLanguage} onChange={(event) => updatePreferences({ defaultLanguage: event.target.value as Language })} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100">
-              {languages.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}
-            </select>
-          </div>
-          <div>
+        <section className="py-7" aria-label="Speech preferences">
+          <div className="w-full">
             <div className="mb-2 flex items-center justify-between gap-3">
               <label htmlFor="speech-rate" className="flex items-center gap-2 font-semibold text-slate-900"><Volume2 aria-hidden="true" className="size-4 text-indigo-700" />Speech rate</label>
               <output htmlFor="speech-rate" className="text-sm font-bold tabular-nums text-indigo-800">{preferences.speechRate.toFixed(1)}x</output>

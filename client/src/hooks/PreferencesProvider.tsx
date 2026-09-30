@@ -10,7 +10,6 @@ const defaultPreferences: UserPreferences = {
   dyslexiaFriendly: false,
   focusMode: false,
   reducedMotion: false,
-  defaultLanguage: 'en',
   speechRate: 1,
   speechVoiceURI: '',
 }
@@ -18,7 +17,10 @@ const defaultPreferences: UserPreferences = {
 function loadPreferences(): UserPreferences {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? { ...defaultPreferences, ...JSON.parse(saved) as Partial<UserPreferences> } : defaultPreferences
+    if (!saved) return defaultPreferences
+    const savedPreferences = JSON.parse(saved) as Partial<UserPreferences> & { defaultLanguage?: unknown }
+    delete savedPreferences.defaultLanguage
+    return { ...defaultPreferences, ...savedPreferences }
   } catch {
     return defaultPreferences
   }

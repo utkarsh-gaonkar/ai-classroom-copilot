@@ -24,7 +24,7 @@ export default function Layout() {
 				</nav>
 				<div className="mx-4 mb-5 rounded-lg bg-emerald-50 p-4">
 					<p className="text-sm font-bold text-emerald-950">Learn at your pace</p>
-					<p className="mt-1 text-xs leading-5 text-emerald-900/75">Simple explanations, speech, and translation in one calm space.</p>
+					<p className="mt-1 text-xs leading-5 text-emerald-900/75">Simple explanations, speech, and study tools in one calm space.</p>
 				</div>
 				<div className="border-t border-slate-100 px-6 py-4 text-xs text-slate-500">Built for every kind of learner</div>
 			</aside>

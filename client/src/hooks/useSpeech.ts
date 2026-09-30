@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
-import type { Language } from '../types'
 
 export type SpeechStatus = 'idle' | 'playing' | 'paused' | 'error'
 
@@ -71,19 +70,9 @@ export function splitSpeechText(text: string, maxChunkLength = 220): string[] {
 	return chunks
 }
 
-function languagePrefix(language: Language): string[] {
-	switch (language) {
-		case 'hi': return ['hi']
-		case 'mr': return ['mr']
-		case 'kok': return ['kok', 'gom']
-		default: return ['en']
-	}
-}
-
-function matchVoice(voices: SpeechSynthesisVoice[], language: Language): SpeechSynthesisVoice | null {
-	const prefixes = languagePrefix(language)
-	return voices.find((voice) => prefixes.some((prefix) => voice.lang.toLowerCase() === prefix))
-		?? voices.find((voice) => prefixes.some((prefix) => voice.lang.toLowerCase().startsWith(`${prefix}-`)))
+function matchEnglishVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+	return voices.find((voice) => voice.lang.toLowerCase() === 'en')
+		?? voices.find((voice) => voice.lang.toLowerCase().startsWith('en-'))
 		?? null
 }
 
@@ -96,6 +85,7 @@ function startSection(session: ActiveSpeech) {
 	}
 
 	const utterance = new SpeechSynthesisUtterance(session.chunks[session.index])
+	utterance.lang = 'en-US'
 	utterance.rate = session.rate
 	if (session.voice) utterance.voice = session.voice
 	const sectionIndex = session.index
@@ -143,7 +133,7 @@ export function useSpeech() {
 		if (activeSpeech?.owner === owner) stopActiveSpeech()
 	}, [owner])
 
-	const speak = useCallback((text: string, rate: number, language: Language, voiceURI: string) => {
+	const speak = useCallback((text: string, rate: number, voiceURI: string) => {
 		if (!isSupported) {
 			publish({ ...initialSnapshot, status: 'error', message: 'Speech synthesis is not supported in this browser.' })
 			return
@@ -157,7 +147,7 @@ export function useSpeech() {
 			return
 		}
 
-		const selectedVoice = (voiceURI ? voices.find((voice) => voice.voiceURI === voiceURI) : null) ?? matchVoice(voices, language)
+		const selectedVoice = (voiceURI ? voices.find((voice) => voice.voiceURI === voiceURI) : null) ?? matchEnglishVoice(voices)
 		const defaultUsed = !selectedVoice
 		stopActiveSpeech()
 		const session: ActiveSpeech = { owner, chunks: splitSpeechText(text), index: 0, rate, voice: selectedVoice }
@@ -167,7 +157,7 @@ export function useSpeech() {
 			owner,
 			status: 'playing',
 			sectionCount: session.chunks.length,
-			message: defaultUsed ? `No installed ${language.toUpperCase()} voice was found. Using the browser's default voice.` : '',
+			message: defaultUsed ? 'No installed English voice was found. Using the browser\'s default voice.' : '',
 		})
 		startSection(session)
 	}, [isSupported, owner, voices])
@@ -206,6 +196,6 @@ export function useSpeech() {
 		resume,
 		stop,
 		setRate,
-		preferredVoice: matchVoice(voices, 'en'),
+		preferredVoice: matchEnglishVoice(voices),
 	}
 }

@@ -1,12 +1,9 @@
-export type Language = 'en' | 'hi' | 'mr' | 'kok'
-
 export interface UserPreferences {
 	fontSize: number
 	highContrast: boolean
 	dyslexiaFriendly: boolean
 	focusMode: boolean
 	reducedMotion: boolean
-	defaultLanguage: Language
 	speechRate: number
 	speechVoiceURI: string
 }
@@ -29,8 +26,6 @@ export interface StudySession {
 	createdAt: string
 	sourceText: string
 	explanation?: string
-	translation?: string
-	translatedLanguage?: Language
 	quizScore?: number
 	quizTotal?: number
 }
@@ -45,12 +40,6 @@ export interface ExplainRequest {
 export interface ExplainResponse {
 	explanation: string
 	mode: 'demo' | 'gemini' | string
-}
-
-export interface TranslateResponse {
-	translation: string
-	mode: 'demo' | 'gemini' | string
-	targetLang: Language
 }
 
 export interface QuizResponse {

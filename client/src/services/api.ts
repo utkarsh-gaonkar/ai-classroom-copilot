@@ -1,4 +1,4 @@
-import type { ExplainRequest, ExplainResponse, Language, QuizResponse, TranslateResponse } from '../types'
+import type { ExplainRequest, ExplainResponse, QuizResponse } from '../types'
 
 const configuredApiUrl = import.meta.env.VITE_API_URL?.trim() || '/api'
 const API_BASE_URL = `${configuredApiUrl.replace(/\/+$/, '').replace(/\/api$/i, '')}/api`
@@ -22,6 +22,5 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
 	explain: (request: ExplainRequest) => post<ExplainResponse>('explain', request),
-	translate: (text: string, targetLang: Language) => post<TranslateResponse>('translate', { text, targetLang }),
 	quiz: (text: string, questionCount: number) => post<QuizResponse>('quiz', { text, questionCount }),
 }
