@@ -5,6 +5,7 @@ import { ErrorMessage, LoadingSpinner } from '../components/ui'
 import { api } from '../services/api'
 import { saveSession } from '../services/storage'
 import type { QuizQuestion } from '../types'
+import { MAX_STUDY_TEXT_LENGTH } from '../services/documentExtraction'
 
 interface QuizLocationState {
   text?: string
@@ -102,8 +103,8 @@ export default function QuizPractice() {
       {!questions.length && !isLoading && <form onSubmit={generateQuiz} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-4 flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800"><CircleHelp aria-hidden="true" className="size-5" /></span><div><h2 className="font-bold text-slate-950">Choose your study material</h2><p className="mt-1 text-sm text-slate-500">{routeState?.text ? 'We brought your material over from the study workspace.' : 'Paste lesson notes, a reading passage, or the text you just studied.'}</p></div></div>
         <label htmlFor="quiz-source" className="sr-only">Material for quiz</label>
-        <textarea id="quiz-source" value={text} onChange={(event) => setText(event.target.value)} maxLength={15000} placeholder="Paste the material you want to practice…" className="min-h-56 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
-        <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Up to 15,000 characters</span><span>{text.length.toLocaleString()} / 15,000</span></div>
+        <textarea id="quiz-source" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste the material you want to practice…" className="min-h-56 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
+        <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Up to {MAX_STUDY_TEXT_LENGTH.toLocaleString()} characters</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
         {error && <div className="mt-5"><ErrorMessage message={error} onDismiss={() => setError('')} /></div>}
         <button type="submit" disabled={isLoading || !text.trim()} className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-3 font-bold text-white transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />Generate quiz</button>
       </form>}

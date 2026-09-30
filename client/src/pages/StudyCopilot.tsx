@@ -194,6 +194,11 @@ export default function StudyCopilot() {
     if (!file) return
     setUploadError('')
     setExtractionProgress(null)
+		if (file.size > MAX_DOCUMENT_BYTES) {
+			setUploadError('This file is larger than 50 MB. Choose a smaller document.')
+			if (fileInputRef.current) fileInputRef.current.value = ''
+			return
+		}
 
     if (file.type.startsWith('audio/')) {
       setText((current) => {
@@ -258,19 +263,19 @@ export default function StudyCopilot() {
             <button type="submit" disabled={isExplaining || !text.trim()} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-700 px-5 py-3 font-bold text-white transition hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />{isExplaining ? <LoadingSpinner label="Finding a clear explanation…" /> : 'Explain simply'}</button>
           </div>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx,.png,.jpg,.jpeg,.webp,.bmp,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp,image/bmp,.mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a document or image file" />
+            <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx,.pptx,.png,.jpg,.jpeg,.webp,.bmp,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/png,image/jpeg,image/webp,image/bmp,.mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a document, presentation, image, or audio file" />
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload document or image</button>
             <button type="button" onClick={handleVoiceCapture} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
               <Mic aria-hidden="true" className="size-4" />{isListening ? 'Stop dictation' : 'Voice note'}
             </button>
-            <span className="text-xs text-slate-500">Text and English OCR stay in your browser. Max {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.</span>
+            <span className="text-xs text-slate-500">PDF, DOCX, PPTX, text and English OCR stay in your browser. Max {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.</span>
           </div>
           {voiceMessage && <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-700">{voiceMessage}</p>}
           {isExtracting && <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold text-indigo-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{extractionProgress?.stage ?? 'Preparing document…'}</div><progress className="mt-2 h-2 w-full accent-indigo-700" max="100" value={extractionProgress?.percent ?? 0} aria-label="Document extraction progress" /></div>}
           {uploadError && <div className="mb-3"><ErrorMessage message={uploadError} onDismiss={() => setUploadError('')} /></div>}
           {documentName && <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700"><span className="flex min-w-0 items-center gap-2"><FileText aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">{documentName}</span></span><button type="button" onClick={() => setDocumentName('')} className="rounded p-1 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-indigo-600" aria-label="Dismiss document name"><X aria-hidden="true" className="size-4" /></button></div>}
           <label htmlFor="study-material" className="sr-only">Study material preview and editor</label>
-          <textarea id="study-material" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste your lesson notes here, or upload text, a PDF, DOCX, or image…" className="min-h-44 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+          <textarea id="study-material" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste lesson notes or upload a PDF, DOCX, PPTX, image, or text file…" className="min-h-44 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
           <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Extracted text stays here for review and editing before use.</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
           <p className="mt-3 text-center text-xs text-slate-500">Your material stays in this browser session.</p>
         </form>

@@ -12,7 +12,7 @@ export function createApp(allowedOrigins: string[]) {
       callback(null, !origin || allowedOrigins.includes(origin));
     },
   }));
-  app.use(express.json({ limit: '128kb' }));
+  app.use(express.json({ limit: '1mb' }));
 
   app.use('/api/health', healthRouter);
   app.use('/api/ai', aiRouter);

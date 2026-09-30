@@ -16,7 +16,7 @@ const aiLimiter = rateLimit({
 
 aiRouter.use(aiLimiter);
 
-const MAX_TEXT_LENGTH = 15000;
+const MAX_TEXT_LENGTH = 100_000;
 
 const explainSchema = z.object({
   text: z.string().trim().min(1, 'Text is required').max(MAX_TEXT_LENGTH, `Text must be under ${MAX_TEXT_LENGTH} characters`),

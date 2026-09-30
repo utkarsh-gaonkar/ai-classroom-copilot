@@ -18,7 +18,7 @@ const aiLimiter = (0, express_rate_limit_1.default)({
     message: { error: 'Too many requests. Please wait a moment and try again.', status: 429 },
 });
 exports.aiRouter.use(aiLimiter);
-const MAX_TEXT_LENGTH = 15000;
+const MAX_TEXT_LENGTH = 100_000;
 const explainSchema = zod_1.z.object({
     text: zod_1.z.string().trim().min(1, 'Text is required').max(MAX_TEXT_LENGTH, `Text must be under ${MAX_TEXT_LENGTH} characters`),
     level: zod_1.z.enum(['very-simple', 'school', 'college']).default('school'),

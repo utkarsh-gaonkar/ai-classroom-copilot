@@ -98,7 +98,7 @@ npm run lint
 Pop-Location
 ```
 
-The AI endpoints accept study text up to 15,000 characters, are rate-limited, and use a 30-second Groq request timeout. Provider failures return a safe error and do not fall back to demo content; demo responses are used only when the key is missing at request time.
+The AI endpoints accept study text up to 100,000 characters, are rate-limited, and use a 30-second Groq request timeout. Study Workspace extracts PDF, DOCX, PPTX, TXT, and image text locally from files up to 50 MB; OCR is English-only and limited to 20 scanned PDF pages. Provider failures return a safe error and do not fall back to demo content; demo responses are used only when the key is missing at request time.
 
 ## Deploy to Netlify and Render
 

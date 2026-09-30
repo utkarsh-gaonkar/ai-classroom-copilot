@@ -16,7 +16,7 @@ function createApp(allowedOrigins) {
             callback(null, !origin || allowedOrigins.includes(origin));
         },
     }));
-    app.use(express_1.default.json({ limit: '128kb' }));
+    app.use(express_1.default.json({ limit: '1mb' }));
     app.use('/api/health', health_1.healthRouter);
     app.use('/api/ai', ai_1.aiRouter);
     app.use('/api', (_req, res) => {

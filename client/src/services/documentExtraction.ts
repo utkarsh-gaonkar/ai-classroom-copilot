@@ -1,7 +1,7 @@
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
-export const MAX_STUDY_TEXT_LENGTH = 15_000
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
+export const MAX_STUDY_TEXT_LENGTH = 100_000
 const MAX_OCR_PDF_PAGES = 20
 
 export interface ExtractionProgress {
@@ -18,11 +18,11 @@ export class DocumentExtractionError extends Error {
 
 function validateFile(file: File) {
 	const extension = file.name.toLowerCase().split('.').pop()
-	if (!extension || !['txt', 'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(extension)) {
-		throw new DocumentExtractionError('Choose a .txt, .pdf, .docx, PNG, JPG, WEBP, or BMP file.')
+	if (!extension || !['txt', 'pdf', 'docx', 'pptx', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(extension)) {
+		throw new DocumentExtractionError('Choose a .txt, .pdf, or .docx, .pptx, PNG, JPG, WEBP, or BMP file.')
 	}
 	if (file.size === 0) throw new DocumentExtractionError('This file is empty. Choose another file.')
-	if (file.size > MAX_DOCUMENT_BYTES) throw new DocumentExtractionError('This file is larger than 10 MB. Choose a smaller document.')
+	if (file.size > MAX_DOCUMENT_BYTES) throw new DocumentExtractionError('This file is larger than 50 MB. Choose a smaller document.')
 	return extension
 }
 
@@ -75,13 +75,39 @@ export async function extractDocumentText(
 	}
 
 	const buffer = await file.arrayBuffer()
-	onProgress({ stage: extension === 'pdf' ? 'Opening PDF…' : 'Extracting Word document…', percent: 25 })
+	const openingStage = extension === 'pdf' ? 'Opening PDF…' : extension === 'pptx' ? 'Opening PowerPoint…' : 'Extracting Word document…'
+	onProgress({ stage: openingStage, percent: 25 })
 
 	if (extension === 'docx') {
 		const mammoth = (await import('mammoth')).default
 		const result = await mammoth.extractRawText({ arrayBuffer: buffer })
 		onProgress({ stage: 'Checking extracted text…', percent: 90 })
 		const text = validateExtractedText(result.value)
+		onProgress({ stage: 'Document ready', percent: 100 })
+		return text
+	}
+
+	if (extension === 'pptx') {
+		const { unzipSync } = await import('fflate')
+		let slides: string[]
+		try {
+			const entries = unzipSync(new Uint8Array(buffer))
+			const slideNames = Object.keys(entries)
+				.filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+				.sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))
+			if (!slideNames.length) throw new DocumentExtractionError('No slides were found in this PowerPoint file.')
+			slides = slideNames.map((name, index) => {
+				const xml = new DOMParser().parseFromString(new TextDecoder().decode(entries[name]), 'application/xml')
+				if (xml.querySelector('parsererror')) throw new DocumentExtractionError('This PowerPoint file could not be read.')
+				const text = Array.from(xml.getElementsByTagNameNS('*', 't')).map((node) => node.textContent ?? '').join(' ').trim()
+				onProgress({ stage: `Extracting PowerPoint text (${index + 1} of ${slideNames.length})…`, percent: Math.min(90, 25 + Math.round(((index + 1) / slideNames.length) * 65)) })
+				return text
+			})
+		} catch (error) {
+			if (error instanceof DocumentExtractionError) throw error
+			throw new DocumentExtractionError('This PowerPoint file could not be opened. Check the file and try again.')
+		}
+		const text = validateExtractedText(slides.join('\n\n'))
 		onProgress({ stage: 'Document ready', percent: 100 })
 		return text
 	}

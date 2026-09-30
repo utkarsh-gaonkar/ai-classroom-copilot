@@ -49,6 +49,16 @@ let baseUrl = '';
     strict_1.default.equal(body.mode, 'demo');
     strict_1.default.ok(body.explanation.length > 0);
 });
+(0, node_test_1.test)('explain endpoint accepts study material below the 100,000-character limit', async () => {
+    const response = await fetch(`${baseUrl}/api/ai/explain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'x'.repeat(99_000), level: 'school', style: 'summary', length: 'short' }),
+    });
+    const body = await response.json();
+    strict_1.default.equal(response.status, 200);
+    strict_1.default.equal(body.mode, 'demo');
+});
 (0, node_test_1.test)('translate endpoint returns a demo translation for valid input', async () => {
     const response = await fetch(`${baseUrl}/api/ai/translate`, {
         method: 'POST',
@@ -87,7 +97,7 @@ let baseUrl = '';
     const response = await fetch(`${baseUrl}/api/ai/explain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: 'x'.repeat(140_000) }),
+        body: JSON.stringify({ text: 'x'.repeat(1_100_000) }),
     });
     const body = await response.json();
     strict_1.default.equal(response.status, 413);

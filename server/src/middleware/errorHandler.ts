@@ -31,7 +31,7 @@ export function errorHandler(
     return;
   }
   if (parserError.type === 'entity.too.large') {
-    res.status(413).json({ error: 'Request body exceeds the 128 KB limit.', status: 413 });
+    res.status(413).json({ error: 'Request body exceeds the 1 MB limit.', status: 413 });
     return;
   }
 

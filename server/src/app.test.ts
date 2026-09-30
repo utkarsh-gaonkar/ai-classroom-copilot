@@ -52,6 +52,18 @@ test('explain endpoint returns a demo explanation for valid input', async () => 
   assert.ok(body.explanation.length > 0)
 })
 
+test('explain endpoint accepts study material below the 100,000-character limit', async () => {
+  const response = await fetch(`${baseUrl}/api/ai/explain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'x'.repeat(99_000), level: 'school', style: 'summary', length: 'short' }),
+  })
+  const body = await response.json() as { mode: string }
+
+  assert.equal(response.status, 200)
+  assert.equal(body.mode, 'demo')
+})
+
 test('translate endpoint returns a demo translation for valid input', async () => {
   const response = await fetch(`${baseUrl}/api/ai/translate`, {
     method: 'POST',
@@ -96,7 +108,7 @@ test('oversized JSON returns 413', async () => {
   const response = await fetch(`${baseUrl}/api/ai/explain`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: 'x'.repeat(140_000) }),
+    body: JSON.stringify({ text: 'x'.repeat(1_100_000) }),
   })
   const body = await response.json() as { status: number }
 
