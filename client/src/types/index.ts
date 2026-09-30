@@ -62,6 +62,7 @@ export interface NoteFile {
 	type: NoteFileType
 	size: number
 	uploadDate: string
+	extractedText?: string
 }
 
 export interface ResourceLink {

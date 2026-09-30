@@ -3,6 +3,13 @@ import type { Folder, NoteFile } from '../types'
 const FOLDERS_KEY = 'inclusive-classroom-note-folders'
 const FILES_KEY = 'inclusive-classroom-note-files'
 
+export class NotesStorageQuotaError extends Error {
+  constructor() {
+    super('Browser storage is full. Remove saved notes or try a smaller file before uploading again.')
+    this.name = 'NotesStorageQuotaError'
+  }
+}
+
 function readList<T>(key: string): T[] {
   try {
     const saved = localStorage.getItem(key)
@@ -22,9 +29,20 @@ export function saveNoteFolders(folders: Folder[]): void {
 }
 
 export function getNoteFiles(): NoteFile[] {
-  return readList<NoteFile>(FILES_KEY)
+  return readList<(NoteFile & { textContent?: string })>(FILES_KEY).map(({ textContent, ...note }) => ({
+    ...note,
+    extractedText: note.extractedText ?? textContent,
+  }))
 }
 
 export function saveNoteFiles(files: NoteFile[]): void {
-  localStorage.setItem(FILES_KEY, JSON.stringify(files))
+  try {
+    localStorage.setItem(FILES_KEY, JSON.stringify(files))
+  } catch (error) {
+    const isQuotaExceeded = error instanceof DOMException
+      ? error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      : false
+    if (isQuotaExceeded) throw new NotesStorageQuotaError()
+    throw error
+  }
 }

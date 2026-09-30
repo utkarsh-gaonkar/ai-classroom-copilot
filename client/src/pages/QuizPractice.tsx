@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, Check, CircleHelp, FileText, Minus, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CircleHelp, FileText, FolderOpen, Minus, Plus, RotateCcw, Sparkles, Upload, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { ErrorMessage, LoadingSpinner } from '../components/ui'
+import SelectFromNotesModal from '../components/SelectFromNotesModal'
 import { api } from '../services/api'
 import { saveSession } from '../services/storage'
-import type { QuizQuestion } from '../types'
+import type { Folder as NoteFolder, NoteFile, QuizQuestion } from '../types'
 import { DocumentExtractionError, extractDocumentText, MAX_DOCUMENT_BYTES, MAX_STUDY_TEXT_LENGTH, type ExtractionProgress } from '../services/documentExtraction'
 import { calculateMinQuestions, MAX_QUESTION_COUNT, MIN_QUESTION_COUNT } from '../services/quizQuestionCount'
 
@@ -35,6 +36,8 @@ export default function QuizPractice() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null)
   const [documentName, setDocumentName] = useState('')
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
+  const [noteSource, setNoteSource] = useState<{ folderName: string; noteName: string } | null>(null)
   const [isComplete, setIsComplete] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -49,6 +52,8 @@ export default function QuizPractice() {
     setMinRequiredQuestions(minimum)
     setSelectedQuestionCount(minimum)
     setQuestionCountInput(String(minimum))
+    setNoteSource(null)
+    setDocumentName('')
   }
 
   function setQuestionCount(value: number) {
@@ -69,6 +74,7 @@ export default function QuizPractice() {
     if (!file) return
     setUploadError('')
     setExtractionProgress(null)
+    setNoteSource(null)
     setIsExtracting(true)
     try {
       const extracted = await extractDocumentText(file, setExtractionProgress)
@@ -86,6 +92,20 @@ export default function QuizPractice() {
       setIsExtracting(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  function selectSavedNote(note: NoteFile, folder: NoteFolder) {
+    const noteText = note.extractedText ?? ''
+    const minimum = calculateMinQuestions(noteText.length, note.type)
+    setText(noteText)
+    setMinRequiredQuestions(minimum)
+    setSelectedQuestionCount(minimum)
+    setQuestionCountInput(String(minimum))
+    setDocumentName(note.name)
+    setNoteSource({ folderName: folder.name, noteName: note.name })
+    setUploadError('')
+    setError('')
+    setIsNotesModalOpen(false)
   }
 
   async function generateQuiz(event?: FormEvent<HTMLFormElement>) {
@@ -160,11 +180,13 @@ export default function QuizPractice() {
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a PDF, DOCX, or PPTX file" />
           <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting || isLoading} aria-label="Upload a PDF, DOCX, or PPTX file" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload PDF, DOCX, PPTX</button>
+          <button type="button" onClick={() => setIsNotesModalOpen(true)} aria-label="Select quiz material from saved Notes" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700"><FolderOpen aria-hidden="true" className="size-4" />Select from saved Notes</button>
           <span className="text-xs text-slate-500">Extracted locally · up to {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB</span>
         </div>
         {isExtracting && <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 p-3" role="status" aria-live="polite"><p className="text-sm font-semibold text-emerald-900">{extractionProgress?.stage ?? 'Preparing document…'}</p><progress className="mt-2 h-2 w-full accent-emerald-700" max="100" value={extractionProgress?.percent ?? 0} aria-label="Document extraction progress" /></div>}
         {uploadError && <div className="mb-3"><ErrorMessage message={uploadError} onDismiss={() => setUploadError('')} /></div>}
         {documentName && <div className="mb-3 flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700"><FileText aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">Loaded {documentName}</span></div>}
+        {noteSource && <p className="mb-2 rounded-md border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-sm text-indigo-900">Loaded from Notes: {noteSource.folderName} / {noteSource.noteName}</p>}
         <label htmlFor="quiz-source" className="sr-only">Material for quiz</label>
         <textarea id="quiz-source" value={text} onChange={(event) => updatePastedText(event.target.value)} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste the material you want to practice…" className="min-h-56 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-100" />
         <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Up to {MAX_STUDY_TEXT_LENGTH.toLocaleString()} characters</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
@@ -257,6 +279,7 @@ export default function QuizPractice() {
       </section>}
 
       {error && questions.length > 0 && <div className="mt-5"><ErrorMessage message={error} onDismiss={() => setError('')} /></div>}
+      {isNotesModalOpen && <SelectFromNotesModal isOpen={isNotesModalOpen} onClose={() => setIsNotesModalOpen(false)} onSelect={selectSavedNote} />}
     </main>
   )
 }

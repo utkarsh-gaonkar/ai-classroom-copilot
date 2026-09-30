@@ -1,15 +1,16 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowRight, BookOpenText, FileText, Lightbulb, LoaderCircle, Mic, Sparkles, Upload, X } from 'lucide-react'
+import { ArrowRight, BookOpenText, FileText, FolderOpen, Lightbulb, LoaderCircle, Mic, Sparkles, Upload, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useLocation, useNavigate } from 'react-router-dom'
 import SpeechPlayer from '../components/SpeechPlayer'
+import SelectFromNotesModal from '../components/SelectFromNotesModal'
 import { ErrorMessage, LoadingSpinner } from '../components/ui'
 import { api } from '../services/api'
 import { SAMPLE_LESSON } from '../services/sampleContent'
 import { saveSession } from '../services/storage'
 import { DocumentExtractionError, extractDocumentText, MAX_DOCUMENT_BYTES, MAX_STUDY_TEXT_LENGTH, type ExtractionProgress } from '../services/documentExtraction'
 import { buildFlashcards, buildGlossary, buildRecallPrompts } from '../utils/studyTools'
-import type { ExplanationLength, ExplanationLevel, ExplanationStyle } from '../types'
+import type { ExplanationLength, ExplanationLevel, ExplanationStyle, Folder as NoteFolder, NoteFile } from '../types'
 
 const selectClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100'
 const fieldClass = 'block text-sm font-semibold text-slate-800'
@@ -37,6 +38,8 @@ export default function StudyCopilot() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null)
   const [documentName, setDocumentName] = useState('')
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
+  const [noteSource, setNoteSource] = useState<{ folderName: string; noteName: string } | null>(null)
   const [isListening, setIsListening] = useState(false)
   const [voiceMessage, setVoiceMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -54,7 +57,19 @@ export default function StudyCopilot() {
       const nextValue = current.trim() ? `${current.trim()}\n\n${trimmedTranscript}` : trimmedTranscript
       return nextValue.slice(0, MAX_STUDY_TEXT_LENGTH)
     })
+    setNoteSource(null)
     setVoiceMessage('Voice note added to your study material.')
+  }
+
+  function selectSavedNote(note: NoteFile, folder: NoteFolder) {
+    const noteText = note.extractedText ?? ''
+    setText(noteText)
+    setDocumentName(note.name)
+    setNoteSource({ folderName: folder.name, noteName: note.name })
+    setExplanation('')
+    setError('')
+    setUploadError('')
+    setIsNotesModalOpen(false)
   }
 
   function handleVoiceCapture() {
@@ -139,6 +154,7 @@ export default function StudyCopilot() {
   function loadSample() {
     setText(SAMPLE_LESSON.content)
     setExplanation('')
+    setNoteSource(null)
     setError('')
     setUploadError('')
     setDocumentName('')
@@ -148,6 +164,7 @@ export default function StudyCopilot() {
     if (!file) return
     setUploadError('')
     setExtractionProgress(null)
+		setNoteSource(null)
 		if (file.size > MAX_DOCUMENT_BYTES) {
 			setUploadError('This file is larger than 50 MB. Choose a smaller document.')
 			if (fileInputRef.current) fileInputRef.current.value = ''
@@ -215,6 +232,7 @@ export default function StudyCopilot() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx,.pptx,.png,.jpg,.jpeg,.webp,.bmp,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/png,image/jpeg,image/webp,image/bmp,.mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a document, presentation, image, or audio file" />
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload document or image</button>
+            <button type="button" onClick={() => setIsNotesModalOpen(true)} aria-label="Select study material from saved Notes" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700"><FolderOpen aria-hidden="true" className="size-4" />Select from saved Notes</button>
             <button type="button" onClick={handleVoiceCapture} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
               <Mic aria-hidden="true" className="size-4" />{isListening ? 'Stop dictation' : 'Voice note'}
             </button>
@@ -224,8 +242,9 @@ export default function StudyCopilot() {
           {isExtracting && <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold text-indigo-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{extractionProgress?.stage ?? 'Preparing document…'}</div><progress className="mt-2 h-2 w-full accent-indigo-700" max="100" value={extractionProgress?.percent ?? 0} aria-label="Document extraction progress" /></div>}
           {uploadError && <div className="mb-3"><ErrorMessage message={uploadError} onDismiss={() => setUploadError('')} /></div>}
           {documentName && <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700"><span className="flex min-w-0 items-center gap-2"><FileText aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">{documentName}</span></span><button type="button" onClick={() => setDocumentName('')} className="rounded p-1 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-indigo-600" aria-label="Dismiss document name"><X aria-hidden="true" className="size-4" /></button></div>}
+          {noteSource && <p className="mb-2 rounded-md border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-sm text-indigo-900">Loaded from Notes: {noteSource.folderName} / {noteSource.noteName}</p>}
           <label htmlFor="study-material" className="sr-only">Study material preview and editor</label>
-          <textarea id="study-material" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste lesson notes or upload a PDF, DOCX, PPTX, image, or text file…" className="min-h-44 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+          <textarea id="study-material" value={text} onChange={(event) => { setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH)); setNoteSource(null) }} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste lesson notes or upload a PDF, DOCX, PPTX, image, or text file…" className="min-h-44 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
           <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Extracted text stays here for review and editing before use.</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
           <p className="mt-3 text-center text-xs text-slate-500">Your material stays in this browser session.</p>
         </form>
@@ -290,6 +309,7 @@ export default function StudyCopilot() {
           </div>}
         </section>
       </div>
+      {isNotesModalOpen && <SelectFromNotesModal isOpen={isNotesModalOpen} onClose={() => setIsNotesModalOpen(false)} onSelect={selectSavedNote} />}
     </main>
   )
 }

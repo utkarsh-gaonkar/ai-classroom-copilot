@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, FileText, Folder, FolderOpen, FolderPlus, Search, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, FileText, Folder, FolderOpen, FolderPlus, LoaderCircle, Search, Trash2, Upload, X } from 'lucide-react'
+import DeleteFolderModal from '../components/DeleteFolderModal'
 import type { Folder as NoteFolder, NoteFile, NoteFileType } from '../types'
-import { getNoteFiles, getNoteFolders, saveNoteFiles, saveNoteFolders } from '../services/notesStorage'
+import { getNoteFiles, getNoteFolders, NotesStorageQuotaError, saveNoteFiles, saveNoteFolders } from '../services/notesStorage'
+import { DocumentExtractionError, extractDocumentText, MAX_DOCUMENT_BYTES, type ExtractionProgress } from '../services/documentExtraction'
 
-const supportedTypes = new Set<NoteFileType>(['pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt'])
+const supportedTypes = new Set<NoteFileType>(['pdf', 'docx', 'pptx', 'txt'])
 const fieldClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100'
 
 function getFileType(fileName: string): NoteFileType {
@@ -30,9 +32,12 @@ export default function Notes() {
   const [search, setSearch] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [folderToDelete, setFolderToDelete] = useState<NoteFolder | null>(null)
   const [folderName, setFolderName] = useState('')
   const [folderError, setFolderError] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<ExtractionProgress | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const query = search.trim().toLocaleLowerCase()
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId)
@@ -66,29 +71,56 @@ export default function Notes() {
     setIsCreatingFolder(false)
   }
 
-  function addFiles(fileList: FileList | null) {
+  async function addFiles(fileList: FileList | null) {
     if (!selectedFolder || !fileList?.length) return
     const incoming = Array.from(fileList)
     const invalidFiles = incoming.filter((file) => !supportedTypes.has(getFileType(file.name)))
     if (invalidFiles.length) {
-      setUploadError(`Unsupported file type: ${invalidFiles.map((file) => file.name).join(', ')}. Choose PDF, DOC, DOCX, PPT, PPTX, or TXT.`)
+      setUploadError(`Unsupported file type: ${invalidFiles.map((file) => file.name).join(', ')}. Choose PDF, DOCX, PPTX, or TXT.`)
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
 
-    const now = new Date().toISOString()
-    const newFiles = incoming.map((file) => ({
-      id: crypto.randomUUID(),
-      folderId: selectedFolder.id,
-      name: file.name,
-      type: getFileType(file.name),
-      size: file.size,
-      uploadDate: now,
-    }))
-    const nextFiles = [...newFiles, ...files]
-    setFiles(nextFiles)
-    saveNoteFiles(nextFiles)
+    setIsUploading(true)
     setUploadError('')
+    const newFiles: NoteFile[] = []
+    const failures: string[] = []
+    for (const [index, file] of incoming.entries()) {
+      try {
+        if (file.size > MAX_DOCUMENT_BYTES) throw new DocumentExtractionError('File is larger than 50 MB.')
+        setUploadProgress({ stage: `Reading ${file.name} (${index + 1} of ${incoming.length})…`, percent: Math.round((index / incoming.length) * 100) })
+        const extractedText = await extractDocumentText(file, (progress) => setUploadProgress({
+          stage: `${file.name}: ${progress.stage}`,
+          percent: Math.min(99, Math.round(((index + progress.percent / 100) / incoming.length) * 100)),
+        }))
+        newFiles.push({
+          id: crypto.randomUUID(),
+          folderId: selectedFolder.id,
+          name: file.name,
+          type: getFileType(file.name),
+          size: file.size,
+          uploadDate: new Date().toISOString(),
+          extractedText,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not extract text.'
+        failures.push(`${file.name}: ${message}`)
+      }
+    }
+
+    try {
+      const nextFiles = [...newFiles, ...files]
+      saveNoteFiles(nextFiles)
+      setFiles(nextFiles)
+      setUploadError(failures.join(' '))
+    } catch (error) {
+      setUploadError(error instanceof NotesStorageQuotaError
+        ? error.message
+        : 'The extracted notes could not be saved in this browser. Remove some saved notes and try again.')
+    } finally {
+      setIsUploading(false)
+      setUploadProgress(null)
+    }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -96,6 +128,23 @@ export default function Notes() {
     const nextFiles = files.filter((file) => file.id !== fileId)
     setFiles(nextFiles)
     saveNoteFiles(nextFiles)
+  }
+
+  function deleteFolder(folderId: string) {
+    const nextFolders = folders.filter((folder) => folder.id !== folderId)
+    const nextFiles = files.filter((file) => file.folderId !== folderId)
+    try {
+      saveNoteFiles(nextFiles)
+      saveNoteFolders(nextFolders)
+      setFiles(nextFiles)
+      setFolders(nextFolders)
+      setSelectedFolderId((currentId) => currentId === folderId ? null : currentId)
+      setFolderToDelete(null)
+      setUploadError('')
+    } catch {
+      setUploadError('The folder could not be deleted from browser storage. Free some storage space and try again.')
+      setFolderToDelete(null)
+    }
   }
 
   return (
@@ -125,10 +174,11 @@ export default function Notes() {
               <button type="button" onClick={() => { setSelectedFolderId(null); setUploadError('') }} className="mb-3 inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"><ArrowLeft aria-hidden="true" className="size-4" />All notes</button>
               <div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700"><FolderOpen aria-hidden="true" className="size-5" /></span><div><h2 id="folder-heading" className="text-xl font-bold text-slate-950">{selectedFolder.name}</h2><p className="text-sm text-slate-500">{formatCount(files.filter((file) => file.folderId === selectedFolder.id).length, 'file')}</p></div></div>
             </div>
-            <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain" onChange={(event) => addFiles(event.target.files)} className="hidden" aria-label="Choose PDF, Word, PowerPoint, or text files" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} aria-label={`Upload files to ${selectedFolder.name}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-800 transition hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"><Upload aria-hidden="true" className="size-4" />Upload files</button>
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.pptx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain" onChange={(event) => void addFiles(event.target.files)} className="hidden" aria-label="Choose PDF, DOCX, PPTX, or text files" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} aria-label={`Upload files to ${selectedFolder.name}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-800 transition hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload files</button>
           </div>
 
+          {isUploading && <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold text-indigo-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{uploadProgress?.stage ?? 'Extracting note text…'}</div><progress className="mt-2 h-2 w-full accent-indigo-700" max="100" value={uploadProgress?.percent ?? 0} aria-label="Notes extraction progress" /></div>}
           {uploadError && <p role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">{uploadError}</p>}
           {visibleFiles.length ? <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-4 shadow-sm sm:px-6">
             {visibleFiles.map((file) => <li key={file.id} className="flex items-center gap-3 py-4">
@@ -151,11 +201,12 @@ export default function Notes() {
               const folderFiles = files.filter((file) => file.folderId === folder.id)
               const matchingFiles = query ? folderFiles.filter((file) => file.name.toLocaleLowerCase().includes(query)) : folderFiles
               const folderNameMatches = !query || folder.name.toLocaleLowerCase().includes(query)
-              return <li key={folder.id} className="rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-indigo-200 hover:shadow-md">
-                <button type="button" onClick={() => { setSelectedFolderId(folder.id); setUploadError('') }} aria-label={`Open folder ${folder.name}`} className="flex min-h-36 w-full items-start gap-4 rounded-xl p-5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+              return <li key={folder.id} className="relative rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-indigo-200 hover:shadow-md">
+                <button type="button" onClick={() => { setSelectedFolderId(folder.id); setUploadError('') }} aria-label={`Open folder ${folder.name}`} className="flex min-h-36 w-full items-start gap-4 rounded-xl p-5 pr-14 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700"><Folder aria-hidden="true" className="size-5" /></span>
                   <span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-950">{folder.name}</span><span className="mt-1 block text-sm text-slate-500">{query && !folderNameMatches ? `${formatCount(matchingFiles.length, 'matching file')}` : formatCount(folderFiles.length, 'file')}</span><span className="mt-4 block text-xs text-slate-400">Created {formatDate(folder.createdAt)}</span></span>
                 </button>
+                <button type="button" onClick={() => setFolderToDelete(folder)} aria-label="Delete folder" title={`Delete ${folder.name}`} className="absolute right-3 top-3 inline-flex size-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"><Trash2 aria-hidden="true" className="size-4" /></button>
               </li>
             })}
           </ul> : <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
@@ -178,6 +229,7 @@ export default function Notes() {
           </form>
         </section>
       </div>}
+      {folderToDelete && <DeleteFolderModal folderName={folderToDelete.name} onCancel={() => setFolderToDelete(null)} onConfirm={() => deleteFolder(folderToDelete.id)} />}
     </main>
   )
 }
