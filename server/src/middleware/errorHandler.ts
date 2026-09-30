@@ -25,6 +25,16 @@ export function errorHandler(
     return;
   }
 
+  const parserError = err as Error & { type?: string };
+  if (parserError.type === 'entity.parse.failed') {
+    res.status(400).json({ error: 'Request body must contain valid JSON.', status: 400 });
+    return;
+  }
+  if (parserError.type === 'entity.too.large') {
+    res.status(413).json({ error: 'Request body exceeds the 128 KB limit.', status: 413 });
+    return;
+  }
+
   console.error('Unexpected error:', err.message);
   res.status(500).json({
     error: 'An unexpected error occurred. Please try again.',

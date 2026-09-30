@@ -1,5 +1,5 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { ArrowRight, BookOpenText, FileText, Languages, Lightbulb, LoaderCircle, Sparkles, Upload, X } from 'lucide-react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { ArrowRight, BookOpenText, FileText, Languages, Lightbulb, LoaderCircle, Mic, Sparkles, Upload, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useLocation, useNavigate } from 'react-router-dom'
 import SpeechPlayer from '../components/SpeechPlayer'
@@ -9,6 +9,7 @@ import { api } from '../services/api'
 import { SAMPLE_LESSON } from '../services/sampleContent'
 import { saveSession } from '../services/storage'
 import { DocumentExtractionError, extractDocumentText, MAX_DOCUMENT_BYTES, MAX_STUDY_TEXT_LENGTH, type ExtractionProgress } from '../services/documentExtraction'
+import { buildFlashcards, buildGlossary, buildRecallPrompts } from '../utils/studyTools'
 import type { ExplanationLength, ExplanationLevel, ExplanationStyle, Language } from '../types'
 
 const languageOptions: { value: Language; label: string }[] = [
@@ -51,7 +52,76 @@ export default function StudyCopilot() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null)
   const [documentName, setDocumentName] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [voiceMessage, setVoiceMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<{ start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null } | null>(null)
+
+  const glossary = useMemo(() => buildGlossary(text || explanation), [text, explanation])
+  const flashcards = useMemo(() => buildFlashcards(text || explanation), [text, explanation])
+  const recallPrompts = useMemo(() => buildRecallPrompts(text || explanation), [text, explanation])
+  const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({})
+
+  function appendVoiceText(transcript: string) {
+    const trimmedTranscript = transcript.trim()
+    if (!trimmedTranscript) return
+    setText((current) => {
+      const nextValue = current.trim() ? `${current.trim()}\n\n${trimmedTranscript}` : trimmedTranscript
+      return nextValue.slice(0, MAX_STUDY_TEXT_LENGTH)
+    })
+    setVoiceMessage('Voice note added to your study material.')
+  }
+
+  function handleVoiceCapture() {
+    const SpeechRecognitionCtor = (window as typeof window & {
+      SpeechRecognition?: new () => {
+        start: () => void
+        stop: () => void
+        onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+        onerror: ((event: { error?: string }) => void) | null
+        onend: (() => void) | null
+      }
+      webkitSpeechRecognition?: new () => {
+        start: () => void
+        stop: () => void
+        onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+        onerror: ((event: { error?: string }) => void) | null
+        onend: (() => void) | null
+      }
+    }).SpeechRecognition ?? (window as typeof window & { webkitSpeechRecognition?: new () => { start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null } }).webkitSpeechRecognition
+
+    if (!SpeechRecognitionCtor) {
+      setVoiceMessage('Voice dictation is not supported in this browser yet.')
+      return
+    }
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop()
+      setIsListening(false)
+      setVoiceMessage('Voice capture stopped.')
+      return
+    }
+
+    const recognition = new SpeechRecognitionCtor()
+    recognitionRef.current = recognition
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => Array.from(result).map((entry) => entry.transcript).join(' '))
+        .join(' ')
+      appendVoiceText(transcript)
+    }
+    recognition.onerror = (event) => {
+      setVoiceMessage(event.error ? `Voice capture issue: ${event.error}` : 'Voice capture issue. Please try again.')
+      setIsListening(false)
+    }
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognition.start()
+    setIsListening(true)
+    setVoiceMessage('Listening for a voice note…')
+  }
 
   async function handleExplain(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -124,6 +194,22 @@ export default function StudyCopilot() {
     if (!file) return
     setUploadError('')
     setExtractionProgress(null)
+
+    if (file.type.startsWith('audio/')) {
+      setText((current) => {
+        const audioNote = `Audio note: ${file.name}\n\n${current.trim() ? current.trim() : ''}`.trim()
+        return audioNote.slice(0, MAX_STUDY_TEXT_LENGTH)
+      })
+      setDocumentName(file.name)
+      setExplanation('')
+      setTranslation('')
+      setTranslatedLanguage('')
+      setError('')
+      setVoiceMessage('Audio note added. Paste or dictate the transcript if you want it converted into study text.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
     setIsExtracting(true)
     try {
       const extracted = await extractDocumentText(file, setExtractionProgress)
@@ -153,7 +239,7 @@ export default function StudyCopilot() {
       </header>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <form onSubmit={handleExplain} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <form onSubmit={handleExplain} className="focus-panel rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-slate-950">Your study material</h2>
@@ -161,30 +247,35 @@ export default function StudyCopilot() {
             </div>
             <button type="button" onClick={loadSample} className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg border border-indigo-200 px-3 py-2 text-xs font-bold text-indigo-800 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"><BookOpenText aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Load sample lesson</span><span className="sm:hidden">Sample</span></button>
           </div>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => void handleDocument(event.target.files?.[0])} className="sr-only" aria-label="Choose a text, PDF, or DOCX file" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload text, PDF, DOCX</button>
-            <span className="text-xs text-slate-500">Files are extracted in your browser (max {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB).</span>
+          <div className="mb-5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
+            <p className="mb-3 text-sm font-bold text-slate-900">Choose your explanation</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div><label htmlFor="level" className={`${fieldClass} mb-2`}>Learning level</label><select id="level" value={level} onChange={(event) => setLevel(event.target.value as ExplanationLevel)} className={selectClass}><option value="very-simple">Very simple</option><option value="school">School</option><option value="college">College</option></select></div>
+              <div><label htmlFor="style" className={`${fieldClass} mb-2`}>Explanation style</label><select id="style" value={style} onChange={(event) => setStyle(event.target.value as ExplanationStyle)} className={selectClass}><option value="summary">Summary</option><option value="step-by-step">Step by step</option><option value="examples">Examples</option></select></div>
+              <div><label htmlFor="length" className={`${fieldClass} mb-2`}>Answer length</label><select id="length" value={length} onChange={(event) => setLength(event.target.value as ExplanationLength)} className={selectClass}><option value="short">Short</option><option value="detailed">Detailed</option></select></div>
+            </div>
+            {error && <div className="mt-3"><ErrorMessage message={error} onDismiss={() => setError('')} /></div>}
+            <button type="submit" disabled={isExplaining || !text.trim()} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-700 px-5 py-3 font-bold text-white transition hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />{isExplaining ? <LoadingSpinner label="Finding a clear explanation…" /> : 'Explain simply'}</button>
           </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx,.png,.jpg,.jpeg,.webp,.bmp,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp,image/bmp,.mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4" onChange={(event) => void handleDocument(event.target.files?.[0])} className="hidden" aria-label="Choose a document or image file" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-wait disabled:opacity-60"><Upload aria-hidden="true" className="size-4" />Upload document or image</button>
+            <button type="button" onClick={handleVoiceCapture} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+              <Mic aria-hidden="true" className="size-4" />{isListening ? 'Stop dictation' : 'Voice note'}
+            </button>
+            <span className="text-xs text-slate-500">Text and English OCR stay in your browser. Max {MAX_DOCUMENT_BYTES / (1024 * 1024)} MB.</span>
+          </div>
+          {voiceMessage && <p className="mb-3 rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-700">{voiceMessage}</p>}
           {isExtracting && <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold text-indigo-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{extractionProgress?.stage ?? 'Preparing document…'}</div><progress className="mt-2 h-2 w-full accent-indigo-700" max="100" value={extractionProgress?.percent ?? 0} aria-label="Document extraction progress" /></div>}
           {uploadError && <div className="mb-3"><ErrorMessage message={uploadError} onDismiss={() => setUploadError('')} /></div>}
           {documentName && <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700"><span className="flex min-w-0 items-center gap-2"><FileText aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">{documentName}</span></span><button type="button" onClick={() => setDocumentName('')} className="rounded p-1 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-indigo-600" aria-label="Dismiss document name"><X aria-hidden="true" className="size-4" /></button></div>}
           <label htmlFor="study-material" className="sr-only">Study material preview and editor</label>
-          <textarea id="study-material" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste your lesson notes here, or upload a text, PDF, or DOCX file…" className="min-h-60 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+          <textarea id="study-material" value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_STUDY_TEXT_LENGTH))} maxLength={MAX_STUDY_TEXT_LENGTH} placeholder="Paste your lesson notes here, or upload text, a PDF, DOCX, or image…" className="min-h-44 w-full resize-y rounded-lg border border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
           <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Extracted text stays here for review and editing before use.</span><span>{text.length.toLocaleString()} / {MAX_STUDY_TEXT_LENGTH.toLocaleString()}</span></div>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div><label htmlFor="level" className={`${fieldClass} mb-2`}>Learning level</label><select id="level" value={level} onChange={(event) => setLevel(event.target.value as ExplanationLevel)} className={selectClass}><option value="very-simple">Very simple</option><option value="school">School</option><option value="college">College</option></select></div>
-            <div><label htmlFor="style" className={`${fieldClass} mb-2`}>Explanation style</label><select id="style" value={style} onChange={(event) => setStyle(event.target.value as ExplanationStyle)} className={selectClass}><option value="summary">Summary</option><option value="step-by-step">Step by step</option><option value="examples">Examples</option></select></div>
-            <div><label htmlFor="length" className={`${fieldClass} mb-2`}>Answer length</label><select id="length" value={length} onChange={(event) => setLength(event.target.value as ExplanationLength)} className={selectClass}><option value="short">Short</option><option value="detailed">Detailed</option></select></div>
-          </div>
-
-          {error && <div className="mt-5"><ErrorMessage message={error} onDismiss={() => setError('')} /></div>}
-          <button type="submit" disabled={isExplaining || !text.trim()} className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-700 px-5 py-3 font-bold text-white transition hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"><Sparkles aria-hidden="true" className="size-5" />{isExplaining ? <LoadingSpinner label="Finding a clear explanation…" /> : 'Explain simply'}</button>
           <p className="mt-3 text-center text-xs text-slate-500">Your material stays in this browser session.</p>
         </form>
 
-        <section className="min-h-96 rounded-xl border border-slate-200 bg-white shadow-sm" aria-live="polite" aria-busy={isExplaining || isTranslating}>
+        <section className="focus-panel min-h-96 rounded-xl border border-slate-200 bg-white shadow-sm" aria-live="polite" aria-busy={isExplaining || isTranslating}>
           <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
             <div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700"><Lightbulb aria-hidden="true" className="size-5" /></span><div><h2 className="font-bold text-slate-950">Your explanation</h2><p className="text-xs text-slate-500">A clearer way into the topic</p></div></div>
           </div>
@@ -200,6 +291,56 @@ export default function StudyCopilot() {
               </select>
               {isTranslating && <div className="mt-4 text-sm text-indigo-800"><LoadingSpinner label="Translating your explanation…" /></div>}
               {translation && <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50/60 p-4 sm:p-5">{isDemoTranslation && <p role="status" className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">Demo mode is showing a prewritten sample translation.</p>}<h3 className="mb-3 font-bold text-slate-950">{languageOptions.find((option) => option.value === translatedLanguage)?.label} translation</h3><SpeechPlayer text={translation} label="Listen to translation" language={translatedLanguage || 'en'} /><article className="markdown-content mt-4 max-w-none"><ReactMarkdown>{translation}</ReactMarkdown></article></div>}
+            </div>
+
+            <div className="mt-8 border-t border-slate-100 pt-6">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="flex size-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700"><Lightbulb aria-hidden="true" className="size-5" /></span>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950">Study tools</h3>
+                  <p className="text-sm text-slate-500">Helpful prompts built from your lesson content.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-slate-800">Glossary</h4>
+                  <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                    {glossary.map((item) => (
+                      <li key={item.term} className="rounded-lg border border-indigo-100 bg-white p-3">
+                        <p className="font-bold text-indigo-900">{item.term}</p>
+                        <p className="mt-1 leading-6 text-slate-600">{item.definition}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-slate-800">Quick flashcards</h4>
+                  <div className="mt-3 space-y-3">
+                    {flashcards.map((card, index) => (
+                      <button
+                        type="button"
+                        key={`${card.front}-${index}`}
+                        onClick={() => setFlippedCards((current) => ({ ...current, [index]: !current[index] }))}
+                        className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50"
+                      >
+                        <p className="text-xs font-bold uppercase tracking-[0.09em] text-slate-500">{flippedCards[index] ? 'Answer' : 'Prompt'}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-800">{flippedCards[index] ? card.back : card.front}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-slate-800">Active recall</h4>
+                  <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                    {recallPrompts.map((prompt) => (
+                      <li key={prompt} className="rounded-lg border border-emerald-100 bg-white p-3 leading-6">{prompt}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>}
         </section>

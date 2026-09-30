@@ -75,6 +75,8 @@ export default function Settings() {
             <div className="mt-1 flex justify-between pl-7 text-xs text-slate-500"><span>12px</span><span>24px</span></div>
           </div>
           <PreferenceToggle checked={preferences.highContrast} onChange={(highContrast) => updatePreferences({ highContrast })} label="High contrast mode" description="Strengthen text and interface contrast for easier reading." />
+          <PreferenceToggle checked={preferences.dyslexiaFriendly} onChange={(dyslexiaFriendly) => updatePreferences({ dyslexiaFriendly })} label="Dyslexia-friendly reading" description="Use a calmer, open reading style with better spacing and a supportive font." />
+          <PreferenceToggle checked={preferences.focusMode} onChange={(focusMode) => updatePreferences({ focusMode })} label="Reading focus mode" description="Reduce visual distractions so one idea stands out at a time." />
           <PreferenceToggle checked={preferences.reducedMotion} onChange={(reducedMotion) => updatePreferences({ reducedMotion })} label="Reduce motion" description="Minimize transitions and movement throughout the app." />
         </section>
 

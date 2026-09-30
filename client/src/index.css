@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 :root {
@@ -17,12 +17,36 @@ body { min-width: 320px; min-height: 100vh; margin: 0; }
 button, input, select, textarea { font: inherit; }
 h1, h2, h3 { font-family: 'Manrope', 'Aptos', sans-serif; }
 
+:root[data-dyslexia='true'] {
+  --dyslexia-font: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif;
+}
+:root[data-dyslexia='true'] body,
+:root[data-dyslexia='true'] button,
+:root[data-dyslexia='true'] input,
+:root[data-dyslexia='true'] select,
+:root[data-dyslexia='true'] textarea,
+:root[data-dyslexia='true'] .markdown-content,
+:root[data-dyslexia='true'] h1,
+:root[data-dyslexia='true'] h2,
+:root[data-dyslexia='true'] h3 {
+  font-family: var(--dyslexia-font);
+  letter-spacing: 0.01em;
+}
+
 :root[data-contrast='high'] {
   color: #000;
   background: #fff;
   --tw-text-opacity: 1;
 }
 :root[data-contrast='high'] body { color: #000; background: #fff; filter: contrast(1.35); }
+:root[data-focus='true'] body { background: #f4f7ff; }
+:root[data-focus='true'] .focus-panel {
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2), 0 18px 40px rgba(79, 70, 229, 0.08);
+}
+:root[data-focus='true'] .focus-panel textarea,
+:root[data-focus='true'] .focus-panel .markdown-content {
+  background: #fff;
+}
 :root[data-motion='reduced'] *,
 :root[data-motion='reduced'] *::before,
 :root[data-motion='reduced'] *::after {

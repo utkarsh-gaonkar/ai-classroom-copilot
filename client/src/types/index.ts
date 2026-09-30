@@ -3,6 +3,8 @@ export type Language = 'en' | 'hi' | 'mr' | 'kok'
 export interface UserPreferences {
 	fontSize: number
 	highContrast: boolean
+	dyslexiaFriendly: boolean
+	focusMode: boolean
 	reducedMotion: boolean
 	defaultLanguage: Language
 	speechRate: number
@@ -54,4 +56,30 @@ export interface TranslateResponse {
 export interface QuizResponse {
 	quiz: { questions: QuizQuestion[] }
 	mode: 'demo' | 'gemini' | string
+}
+
+export interface Folder {
+	id: string
+	name: string
+	createdAt: string
+}
+
+export type NoteFileType = 'pdf' | 'doc' | 'docx' | 'ppt' | 'pptx' | 'txt' | 'other'
+
+export interface NoteFile {
+	id: string
+	folderId: string
+	name: string
+	type: NoteFileType
+	size: number
+	uploadDate: string
+}
+
+export interface ResourceLink {
+	id: string
+	title: string
+	url: string
+	description?: string
+	category?: string
+	createdAt: string
 }

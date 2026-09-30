@@ -1,9 +1,11 @@
-import { BookOpenText, GraduationCap, LayoutDashboard, Settings, Sparkles } from 'lucide-react'
+import { BookOpenText, Files, GraduationCap, LayoutDashboard, Link2, Settings, Sparkles } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
 const navigation = [
 	{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
 	{ to: '/study', label: 'Study workspace', icon: BookOpenText },
+	{ to: '/notes', label: 'Notes', icon: Files },
+	{ to: '/links', label: 'Links', icon: Link2 },
 	{ to: '/quiz', label: 'Quiz practice', icon: Sparkles },
 	{ to: '/settings', label: 'Preferences', icon: Settings },
 ]
@@ -33,7 +35,7 @@ export default function Layout() {
 					<span className="text-xs font-semibold text-emerald-800">Inclusive learning</span>
 				</div>
 				<div className="min-w-0 flex-1 pb-20 lg:pb-0"><Outlet /></div>
-				<nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur lg:hidden">
+				<nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-slate-200 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur lg:hidden">
 					{navigation.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-h-14 flex-col items-center justify-center gap-1 rounded-md px-1 text-[10px] font-semibold ${isActive ? 'text-indigo-800' : 'text-slate-500'}`}><Icon aria-hidden="true" className="size-5" /><span>{label}</span></NavLink>)}
 				</nav>
 			</div>
